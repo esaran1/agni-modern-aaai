@@ -1,0 +1,44 @@
+grid:
+  grid_km: 10
+  bbox:
+    lon_min: 108.0
+    lon_max: 119.0
+    lat_min: -4.0
+    lat_max: 4.0
+temporal:
+  reference_start: 2019-01-01
+  reference_end: 2021-12-31
+  reference_stride_days: 7
+  lookback_days: 60
+  temporal_windows: [3, 7, 14, 30, 60]
+  horizon_days: 30
+split:
+  buffer_days: 30
+  train_end: 2020-06-30
+  val_end: 2021-03-31
+  test_end: 2021-12-31
+spatial_blocks:
+  block_size_km: 50
+  n_folds: 5
+  seed: 42
+sources:
+  - name: era5
+    enabled: true
+    params: {}
+  - name: sentinel2
+    enabled: true
+    params: {}
+  - name: srtm
+    enabled: true
+    params: {}
+  - name: modis_fire
+    enabled: true
+    params: {}
+  - name: modis_burn
+    enabled: true
+    params: {}
+  - name: dynamic_world
+    enabled: true
+    params: {}
+raw_dir: data/raw
+processed_dir: data/processed

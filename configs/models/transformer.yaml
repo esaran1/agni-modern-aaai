@@ -1,0 +1,11 @@
+name: transformer
+task: classification
+params:
+  hidden_dim: 64
+  n_heads: 4
+  n_layers: 2
+  dropout: 0.1
+  epochs: 15
+  lr: 0.001
+  batch_size: 128
+  random_state: 42

@@ -1,0 +1,68 @@
+name: national_aaai
+task: occurrence
+data:
+  grid:
+    grid_km: 10
+    bbox:
+      lon_min: 94.0
+      lon_max: 141.0
+      lat_min: -11.0
+      lat_max: 6.5
+  temporal:
+    reference_start: 2018-01-01
+    reference_end: 2023-12-31
+    reference_stride_days: 7
+    lookback_days: 60
+    temporal_windows: [3, 7, 14, 30, 60]
+    horizon_days: 30
+  split:
+    buffer_days: 30
+    train_end: 2021-12-31
+    val_end: 2022-12-31
+    test_end: 2023-12-31
+  spatial_blocks:
+    block_size_km: 50
+    n_folds: 5
+    seed: 42
+  sources:
+    - name: era5
+      enabled: true
+      params: {}
+    - name: sentinel2
+      enabled: true
+      params: {}
+    - name: srtm
+      enabled: true
+      params: {}
+    - name: modis_fire
+      enabled: true
+      params: {}
+    - name: modis_burn
+      enabled: true
+      params: {}
+    - name: dynamic_world
+      enabled: true
+      params: {}
+    - name: peat
+      enabled: true
+      params: {}
+    - name: worldpop
+      enabled: true
+      params: {}
+  raw_dir: data/raw
+  processed_dir: data/processed
+model:
+  name: xgboost
+  task: classification
+  params:
+    n_estimators: 500
+    max_depth: 7
+    learning_rate: 0.03
+    subsample: 0.85
+    colsample_bytree: 0.85
+    reg_lambda: 1.0
+    random_state: 42
+evaluation:
+  bootstrap_samples: 1000
+  confidence_level: 0.95
+output_dir: outputs/national_aaai

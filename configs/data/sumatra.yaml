@@ -1,0 +1,7 @@
+grid:
+  grid_km: 10
+  bbox:
+    lon_min: 95.0
+    lon_max: 106.0
+    lat_min: -6.0
+    lat_max: 6.0
