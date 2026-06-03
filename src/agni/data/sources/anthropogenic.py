@@ -55,7 +55,12 @@ class AnthropogenicAdapter:
             rivers = ee.FeatureCollection("WWF/HydroSHEDS/v1/FreeFlowingRivers")
             nearest = rivers.filterBounds(ee_geometry.buffer(50000))
             centroid = ee_geometry.centroid()
-            distances = nearest.map(lambda feature: feature.set("dist", feature.geometry().distance(centroid)))
+            distances = nearest.map(
+                lambda feature: feature.set(
+                    "dist",
+                    feature.geometry().distance(centroid),
+                )
+            )
             min_dist = distances.aggregate_min("dist")
             value = min_dist.getInfo() if hasattr(min_dist, "getInfo") else min_dist
             return {"anthropogenic_dist_to_river_m": value}

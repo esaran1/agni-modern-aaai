@@ -60,9 +60,14 @@ class SplitConformalRiskPredictor:
         sets = self.predict(test_risk_pred)
         truth = np.asarray(test_risk_true, dtype=float)
         covered = sum(
-            1 for interval, observed in zip(sets, truth, strict=False) if interval.risk_lower <= observed <= interval.risk_upper
+            1
+            for interval, observed in zip(sets, truth, strict=False)
+            if interval.risk_lower <= observed <= interval.risk_upper
         )
-        widths = np.array([interval.risk_upper - interval.risk_lower for interval in sets], dtype=float)
+        widths = np.array(
+            [interval.risk_upper - interval.risk_lower for interval in sets],
+            dtype=float,
+        )
         result = {
             "empirical_coverage": float(covered / max(len(sets), 1)),
             "target_coverage": float(1 - self.alpha),
@@ -73,7 +78,9 @@ class SplitConformalRiskPredictor:
             "n_test": int(len(sets)),
         }
         if result["n_calibration"] < 20:
-            result["warning"] = "Coverage guarantees are noisy with fewer than 20 calibration samples"
+            result["warning"] = (
+                "Coverage guarantees are noisy with fewer than 20 calibration samples"
+            )
         return result
 
 
@@ -95,7 +102,11 @@ class AdaptiveConformalRiskPredictor:
         if self.q is None:
             raise RuntimeError("Must calibrate before predicting")
         results = []
-        for risk, sigma in zip(np.asarray(test_risk_pred, dtype=float), np.asarray(test_sigma, dtype=float), strict=False):
+        for risk, sigma in zip(
+            np.asarray(test_risk_pred, dtype=float),
+            np.asarray(test_sigma, dtype=float),
+            strict=False,
+        ):
             width = float(self.q * sigma)
             results.append(
                 ConformalRiskSet(

@@ -12,7 +12,7 @@ class ProbabilityCalibrator:
         self.method = method
         self.model = None
 
-    def fit(self, y_score, y_true) -> "ProbabilityCalibrator":
+    def fit(self, y_score, y_true) -> ProbabilityCalibrator:
         if self.method == "isotonic":
             self.model = IsotonicRegression(out_of_bounds="clip")
             self.model.fit(y_score, y_true)

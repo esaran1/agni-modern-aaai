@@ -10,7 +10,14 @@ from agni.config import load_experiment_config
 from agni.data.builder import build_dataset
 from agni.data.grid import build_patch_grid
 from agni.data.sources import build_adapters
-from agni.pipeline import enrich_feature_table, fit_and_predict, save_training_outputs
+from agni.experiment_utils import fit_risk_pipeline
+from agni.features.guard import infer_feature_columns
+from agni.pipeline import (
+    enrich_feature_table,
+    fit_and_predict,
+    save_training_outputs,
+    split_dataset,
+)
 
 app = typer.Typer()
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
@@ -37,7 +44,20 @@ def main(config: str) -> None:
     features_path = Path(experiment.data.processed_dir) / "features.parquet"
     features.to_parquet(features_path, index=False)
 
-    model, predictions, metrics = fit_and_predict(features, experiment)
+    if experiment.task == "risk":
+        split_df = split_dataset(features, experiment)
+        result = fit_risk_pipeline(
+            split_df,
+            horizon_days=experiment.data.temporal.horizon_days,
+            feature_columns=infer_feature_columns(split_df),
+            occurrence_model_name=experiment.model.resolve_occurrence_model_name(),
+            occurrence_model_params=experiment.model.resolve_occurrence_model_params(),
+            severity_estimator_name=experiment.model.resolve_severity_model_name(),
+            severity_model_params=experiment.model.resolve_severity_model_params(),
+        )
+        model, predictions, metrics = result.model, result.predictions, result.metrics
+    else:
+        model, predictions, metrics = fit_and_predict(features, experiment)
     save_training_outputs(experiment, model, predictions, metrics)
     LOGGER.info("Experiment complete with metrics: %s", metrics)
 

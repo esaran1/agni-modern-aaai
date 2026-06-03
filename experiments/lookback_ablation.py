@@ -29,12 +29,12 @@ def filter_features_by_max_window(feature_columns: list[str], max_window: int) -
 
 
 @app.command()
-def main(config: str, windows: list[int] = [7, 14, 30, 60]) -> None:
+def main(config: str, windows: list[int] | None = None) -> None:
     experiment = load_experiment_config(config)
     df = load_dataset(experiment)
     all_features = infer_feature_columns(df)
     rows = []
-    for window in windows:
+    for window in (windows or [7, 14, 30, 60]):
         filtered = filter_features_by_max_window(all_features, window)
         working = df.copy()
         drop_columns = [column for column in all_features if column not in filtered]

@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import pandas as pd
 from shapely import wkt
@@ -89,4 +90,8 @@ def build_dataset(
         extra={"output_name": output_name},
     )
     manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-    return DatasetBuildResult(dataset=dataset, dataset_path=dataset_path, manifest_path=manifest_path)
+    return DatasetBuildResult(
+        dataset=dataset,
+        dataset_path=dataset_path,
+        manifest_path=manifest_path,
+    )

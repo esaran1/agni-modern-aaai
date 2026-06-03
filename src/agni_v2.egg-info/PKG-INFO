@@ -1,3 +1,32 @@
+Metadata-Version: 2.4
+Name: agni-v2
+Version: 0.1.0
+Summary: Research-grade wildfire occurrence and severity forecasting framework
+Author: OpenAI Codex
+Requires-Python: <3.13,>=3.11
+Description-Content-Type: text/markdown
+Requires-Dist: click==8.1.7
+Requires-Dist: earthengine-api==0.1.414
+Requires-Dist: geopandas==0.14.4
+Requires-Dist: matplotlib==3.9.1
+Requires-Dist: numpy==1.26.4
+Requires-Dist: osmnx==1.9.4
+Requires-Dist: pandas==2.2.2
+Requires-Dist: pyarrow==16.1.0
+Requires-Dist: pydantic==2.8.2
+Requires-Dist: pyyaml==6.0.2
+Requires-Dist: rasterio==1.3.10
+Requires-Dist: scikit-learn==1.5.1
+Requires-Dist: scipy==1.14.0
+Requires-Dist: shap==0.46.0
+Requires-Dist: shapely==2.0.5
+Requires-Dist: torch==2.4.0
+Requires-Dist: typer==0.12.3
+Requires-Dist: xgboost==2.1.1
+Provides-Extra: dev
+Requires-Dist: pytest==8.2.2; extra == "dev"
+Requires-Dist: ruff==0.5.4; extra == "dev"
+
 # Agni-v2
 
 Agni-v2 is a research-grade wildfire occurrence and pre-ignition severity forecasting framework for Indonesian peatlands. It is designed for reproducible AAAI-style experiments with explicit configuration, spatiotemporal leakage controls, multi-source feature engineering, and risk ranking via expected loss.

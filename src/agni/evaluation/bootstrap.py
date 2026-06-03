@@ -48,7 +48,10 @@ def patch_block_bootstrap(
     values = []
     for _ in range(n_bootstrap):
         sampled_patches = rng.choice(patches, size=len(patches), replace=True)
-        sampled = pd.concat([df[df[patch_col] == patch] for patch in sampled_patches], ignore_index=True)
+        sampled = pd.concat(
+            [df[df[patch_col] == patch] for patch in sampled_patches],
+            ignore_index=True,
+        )
         if sampled[target_col].nunique() < 2:
             continue
         values.append(metric_fn(sampled[target_col].to_numpy(), sampled[score_col].to_numpy()))

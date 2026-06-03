@@ -44,6 +44,10 @@ def assert_no_leakage(feature_columns: list[str]) -> None:
 
 
 def infer_feature_columns(df) -> list[str]:
-    candidates = [column for column in df.columns if any(column.startswith(p) for p in ALLOWED_PREFIXES)]
+    candidates = [
+        column
+        for column in df.columns
+        if any(column.startswith(prefix) for prefix in ALLOWED_PREFIXES)
+    ]
     assert_no_leakage(candidates)
     return candidates

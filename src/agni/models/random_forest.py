@@ -18,7 +18,11 @@ class RandomForestModel(BaseModel):
     ) -> None:
         params = self.config.get("params", {})
         task = self.config.get("task", "classification")
-        estimator = RandomForestClassifier(**params) if task == "classification" else RandomForestRegressor(**params)
+        estimator = (
+            RandomForestClassifier(**params)
+            if task == "classification"
+            else RandomForestRegressor(**params)
+        )
         self.model = Pipeline(
             [
                 ("imputer", SimpleImputer(strategy="median")),

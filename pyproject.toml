@@ -7,11 +7,12 @@ name = "agni-v2"
 version = "0.1.0"
 description = "Research-grade wildfire occurrence and severity forecasting framework"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.13"
 authors = [{ name = "OpenAI Codex" }]
 dependencies = [
+    "click==8.1.7",
     "earthengine-api==0.1.414",
-    "geopandas==1.0.1",
+    "geopandas==0.14.4",
     "matplotlib==3.9.1",
     "numpy==1.26.4",
     "osmnx==1.9.4",

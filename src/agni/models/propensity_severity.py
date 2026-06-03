@@ -1,26 +1,102 @@
 from __future__ import annotations
 
+import inspect
 from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import HistGradientBoostingRegressor
+from sklearn.ensemble import HistGradientBoostingRegressor, RandomForestRegressor
 from sklearn.impute import SimpleImputer
-from sklearn.pipeline import Pipeline
+from sklearn.linear_model import LinearRegression
 
 from agni.features.guard import assert_no_leakage
 from agni.models.base import BaseModel
 
+SUPPORTED_SEVERITY_ESTIMATORS = {"xgboost", "random_forest", "logreg"}
+
 
 @dataclass
 class _SklearnSeverityArtifacts:
-    pipeline: Pipeline
+    imputer: SimpleImputer
+    estimator: object
 
 
 def _get_model_params(config: dict) -> dict:
     params = config.get("params", config)
     return dict(params)
 
+
+def _filter_supported_params(factory, params: dict) -> dict:
+    supported = set(inspect.signature(factory).parameters)
+    return {key: value for key, value in params.items() if key in supported}
+
+
+def _fit_regressor(
+    estimator_name: str,
+    params: dict,
+    x_train: np.ndarray,
+    y_train: np.ndarray,
+    x_val: np.ndarray | None,
+    y_val: np.ndarray | None,
+    train_weights: np.ndarray | None,
+    val_weights: np.ndarray | None,
+) -> object:
+    estimator_name = estimator_name.lower()
+    if estimator_name not in SUPPORTED_SEVERITY_ESTIMATORS:
+        supported = ", ".join(sorted(SUPPORTED_SEVERITY_ESTIMATORS))
+        raise ValueError(
+            f"Unsupported severity estimator family '{estimator_name}'. "
+            f"Supported options are: {supported}."
+        )
+
+    if estimator_name == "xgboost":
+        try:
+            from xgboost import XGBRegressor
+
+            estimator = XGBRegressor(
+                objective="reg:squarederror",
+                eval_metric="rmse",
+                **_filter_supported_params(XGBRegressor, params),
+            )
+            fit_kwargs = {"verbose": False}
+            if train_weights is not None:
+                fit_kwargs["sample_weight"] = train_weights
+            if x_val is not None and y_val is not None:
+                fit_kwargs["eval_set"] = [(x_val, y_val)]
+                if val_weights is not None and train_weights is not None:
+                    fit_kwargs["sample_weight_eval_set"] = [val_weights]
+            estimator.fit(x_train, y_train, **fit_kwargs)
+            return estimator
+        except ImportError:
+            estimator = HistGradientBoostingRegressor(
+                learning_rate=params.get("learning_rate", 0.03),
+                max_depth=params.get("max_depth", 6),
+                max_iter=params.get("n_estimators", 500),
+                random_state=params.get("random_state", 42),
+            )
+            fit_kwargs = {}
+            if train_weights is not None:
+                fit_kwargs["sample_weight"] = train_weights
+            estimator.fit(x_train, y_train, **fit_kwargs)
+            return estimator
+
+    if estimator_name == "random_forest":
+        estimator = RandomForestRegressor(
+            **_filter_supported_params(RandomForestRegressor, params),
+        )
+        fit_kwargs = {}
+        if train_weights is not None:
+            fit_kwargs["sample_weight"] = train_weights
+        estimator.fit(x_train, y_train, **fit_kwargs)
+        return estimator
+
+    if estimator_name == "logreg":
+        estimator = LinearRegression(**_filter_supported_params(LinearRegression, params))
+        fit_kwargs = {}
+        if train_weights is not None:
+            fit_kwargs["sample_weight"] = train_weights
+        estimator.fit(x_train, y_train, **fit_kwargs)
+        return estimator
 
 class PropensityWeightedSeverityModel(BaseModel):
     """Severity regression with inverse-propensity weighting."""
@@ -77,46 +153,35 @@ class PropensityWeightedSeverityModel(BaseModel):
             )
 
         train_weights = self.compute_ipw_weights(df_train[propensity_column].to_numpy())
+        val_weights = (
+            self.compute_ipw_weights(df_val[propensity_column].to_numpy())
+            if propensity_column in df_val.columns and not df_val.empty
+            else None
+        )
         params = _get_model_params(self.config)
-        estimator = None
-        try:
-            from xgboost import XGBRegressor
-
-            estimator = XGBRegressor(
-                objective="reg:squarederror",
-                eval_metric="rmse",
-                max_depth=params.get("max_depth", 6),
-                learning_rate=params.get("learning_rate", 0.03),
-                subsample=params.get("subsample", 0.8),
-                colsample_bytree=params.get("colsample_bytree", 0.8),
-                n_estimators=params.get("n_estimators", 500),
-                random_state=params.get("random_state", 42),
-            )
-        except ImportError:
-            estimator = HistGradientBoostingRegressor(
-                learning_rate=params.get("learning_rate", 0.03),
-                max_depth=params.get("max_depth", 6),
-                max_iter=params.get("n_estimators", 500),
-                random_state=params.get("random_state", 42),
-            )
-
-        pipeline = Pipeline(
-            [
-                ("imputer", SimpleImputer(strategy="median")),
-                ("estimator", estimator),
-            ]
+        estimator_name = self.config.get("estimator_name", "xgboost")
+        imputer = SimpleImputer(strategy="median")
+        x_train = imputer.fit_transform(df_train[feature_columns])
+        y_train = df_train[target_column].to_numpy()
+        x_val = imputer.transform(df_val[feature_columns]) if not df_val.empty else None
+        y_val = df_val[target_column].to_numpy() if not df_val.empty else None
+        estimator = _fit_regressor(
+            estimator_name=estimator_name,
+            params=params,
+            x_train=x_train,
+            y_train=y_train,
+            x_val=x_val,
+            y_val=y_val,
+            train_weights=train_weights,
+            val_weights=val_weights,
         )
-        pipeline.fit(
-            df_train[feature_columns],
-            df_train[target_column],
-            estimator__sample_weight=train_weights,
-        )
-        self.model = _SklearnSeverityArtifacts(pipeline=pipeline)
+        self.model = _SklearnSeverityArtifacts(imputer=imputer, estimator=estimator)
 
     def predict(self, df: pd.DataFrame, feature_columns: list[str]) -> np.ndarray:
         if self.model is None:
             raise RuntimeError("Model has not been fit")
-        return self.model.pipeline.predict(df[feature_columns])
+        x = self.model.imputer.transform(df[feature_columns])
+        return self.model.estimator.predict(x)
 
     def predict_proba(self, df: pd.DataFrame, feature_columns: list[str]) -> pd.Series:
         return pd.Series(self.predict(df, feature_columns), index=df.index)
@@ -134,32 +199,20 @@ class NaiveSeverityModel(PropensityWeightedSeverityModel):
         propensity_column: str = "propensity_score",
     ) -> None:
         params = _get_model_params(self.config)
-        try:
-            from xgboost import XGBRegressor
-
-            estimator = XGBRegressor(
-                objective="reg:squarederror",
-                eval_metric="rmse",
-                max_depth=params.get("max_depth", 6),
-                learning_rate=params.get("learning_rate", 0.03),
-                subsample=params.get("subsample", 0.8),
-                colsample_bytree=params.get("colsample_bytree", 0.8),
-                n_estimators=params.get("n_estimators", 500),
-                random_state=params.get("random_state", 42),
-            )
-        except ImportError:
-            estimator = HistGradientBoostingRegressor(
-                learning_rate=params.get("learning_rate", 0.03),
-                max_depth=params.get("max_depth", 6),
-                max_iter=params.get("n_estimators", 500),
-                random_state=params.get("random_state", 42),
-            )
-
-        pipeline = Pipeline(
-            [
-                ("imputer", SimpleImputer(strategy="median")),
-                ("estimator", estimator),
-            ]
+        estimator_name = self.config.get("estimator_name", "xgboost")
+        imputer = SimpleImputer(strategy="median")
+        x_train = imputer.fit_transform(df_train[feature_columns])
+        y_train = df_train[target_column].to_numpy()
+        x_val = imputer.transform(df_val[feature_columns]) if not df_val.empty else None
+        y_val = df_val[target_column].to_numpy() if not df_val.empty else None
+        estimator = _fit_regressor(
+            estimator_name=estimator_name,
+            params=params,
+            x_train=x_train,
+            y_train=y_train,
+            x_val=x_val,
+            y_val=y_val,
+            train_weights=None,
+            val_weights=None,
         )
-        pipeline.fit(df_train[feature_columns], df_train[target_column])
-        self.model = _SklearnSeverityArtifacts(pipeline=pipeline)
+        self.model = _SklearnSeverityArtifacts(imputer=imputer, estimator=estimator)

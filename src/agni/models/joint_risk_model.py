@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import numpy as np
 
-
 try:
     import torch
     import torch.nn as nn
@@ -83,13 +82,26 @@ if nn is not None:
             h = self.input_proj(x)
             positions = torch.arange(seq_len, device=x.device).unsqueeze(0).expand(batch_size, -1)
             h = h + self.pos_embedding(positions)
-            h = self.encoder(h)
+            padding_mask = None
+            if seq_lengths is not None:
+                seq_lengths = seq_lengths.to(x.device).long().clamp(min=1, max=seq_len)
+                pad_starts = (seq_len - seq_lengths).unsqueeze(1)
+                padding_mask = positions < pad_starts
+            h = self.encoder(h, src_key_padding_mask=padding_mask)
             h_pooled = h[:, -1, :]
             occ_logit = self.occ_head(h_pooled).squeeze(-1)
             sev_pred = self.sev_head(h_pooled).squeeze(-1)
             return occ_logit, sev_pred
 
-        def compute_loss(self, occ_logit, sev_pred, y_occ, y_sev, sev_available, propensity_scores=None):
+        def compute_loss(
+            self,
+            occ_logit,
+            sev_pred,
+            y_occ,
+            y_sev,
+            sev_available,
+            propensity_scores=None,
+        ):
             occ_loss = self.occ_loss_fn(occ_logit, y_occ.float())
             sev_mask = sev_available.bool()
             if sev_mask.sum() > 0:
@@ -141,17 +153,17 @@ if nn is not None:
             self.model.train()
             epoch_losses = []
             for batch in train_loader:
-                if len(batch) == 5:
-                    x, y_occ, y_sev, sev_avail, indices = batch
+                if len(batch) == 6:
+                    x, seq_lengths, y_occ, y_sev, sev_avail, indices = batch
                 else:
-                    x, y_occ, y_sev, sev_avail = batch
+                    x, seq_lengths, y_occ, y_sev, sev_avail = batch
                     indices = None
                 p_scores = None
                 if propensity_scores is not None and indices is not None:
                     p_scores = propensity_scores[indices]
 
                 self.optimizer.zero_grad()
-                occ_logit, sev_pred = self.model(x)
+                occ_logit, sev_pred = self.model(x, seq_lengths=seq_lengths)
                 loss, components = self.model.compute_loss(
                     occ_logit,
                     sev_pred,
@@ -172,8 +184,8 @@ if nn is not None:
             all_sev = []
             with torch.no_grad():
                 for batch in val_loader:
-                    x, y_occ, y_sev, sev_avail = batch[:4]
-                    occ_logit, sev_pred = self.model(x)
+                    x, seq_lengths, y_occ, y_sev, sev_avail = batch[:5]
+                    occ_logit, sev_pred = self.model(x, seq_lengths=seq_lengths)
                     p_fire = torch.sigmoid(occ_logit)
                     risk = p_fire * sev_pred
                     mask = sev_avail.bool()
@@ -190,6 +202,7 @@ if nn is not None:
 
     def build_joint_risk_loader(
         x,
+        seq_lengths,
         y_occ,
         y_sev,
         sev_available,
@@ -198,9 +211,9 @@ if nn is not None:
         include_indices: bool = False,
     ):
         if include_indices:
-            dataset = IndexedTensorDataset(x, y_occ, y_sev, sev_available)
+            dataset = IndexedTensorDataset(x, seq_lengths, y_occ, y_sev, sev_available)
         else:
-            dataset = TensorDataset(x, y_occ, y_sev, sev_available)
+            dataset = TensorDataset(x, seq_lengths, y_occ, y_sev, sev_available)
         return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
 
 else:  # pragma: no cover

@@ -89,7 +89,11 @@ class TransformerModel(BaseModel):
                 loss.backward()
                 optimizer.step()
 
-        self.model = _TorchArtifacts(module=module.eval(), imputer=imputer, feature_count=x_train.shape[1])
+        self.model = _TorchArtifacts(
+            module=module.eval(),
+            imputer=imputer,
+            feature_count=x_train.shape[1],
+        )
 
     def predict_proba(self, df: pd.DataFrame, feature_columns: list[str]) -> pd.Series:
         if self.model is None:

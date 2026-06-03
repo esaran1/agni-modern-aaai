@@ -33,16 +33,28 @@ def test_type2_detection_catches_known_leak() -> None:
     assert result["overlap_days"] > 0
 
 
-def test_leakage_curve_monotonic_non_increasing() -> None:
+def test_leakage_curve_tracks_increasing_temporal_separation() -> None:
     df = _make_frame()
 
     def train_model_fn(df_train, df_val):
-        del df_train, df_val
-        return object()
+        del df_val
+        return {
+            "last_train_date": pd.to_datetime(df_train["reference_date"]).max(),
+        }
 
     def evaluate_fn(model, df_test):
-        del model, df_test
-        return 1.0
+        first_test_date = pd.to_datetime(df_test["reference_date"]).min()
+        gap_days = int((first_test_date - model["last_train_date"]).days)
+        return max(0.0, 1.0 - gap_days / 365.0)
 
-    curve = compute_leakage_curve(df, train_model_fn, evaluate_fn, horizon_days=30, buffer_range=[0, 10, 20, 30, 40])
-    assert curve["roc_auc"].is_monotonic_decreasing or curve["roc_auc"].nunique() == 1
+    curve = compute_leakage_curve(
+        df,
+        train_model_fn,
+        evaluate_fn,
+        horizon_days=30,
+        buffer_range=[0, 10, 20, 30, 40],
+    )
+    assert curve["buffer_days"].tolist() == [0, 10, 20, 30]
+    assert curve["type2_overlap_days"].tolist() == [30, 20, 10, 0]
+    assert curve["roc_auc"].is_monotonic_decreasing
+    assert curve["roc_auc"].iloc[0] > curve["roc_auc"].iloc[-1]

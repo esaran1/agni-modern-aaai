@@ -15,12 +15,15 @@ def build_occurrence_labels(
     label_col = f"y_occ_{horizon_days}d"
     frame[label_col] = 0
 
-    for patch_id, group in frame.groupby(group_col, sort=False):
+    for _patch_id, group in frame.groupby(group_col, sort=False):
         event_dates = group.loc[group[event_indicator_col].fillna(0).astype(int) == 1, date_col]
         if event_dates.empty:
             continue
         for idx, ref_date in zip(group.index, group[date_col], strict=False):
-            in_window = ((event_dates > ref_date) & (event_dates <= ref_date + pd.Timedelta(days=horizon_days))).any()
+            in_window = (
+                (event_dates > ref_date)
+                & (event_dates <= ref_date + pd.Timedelta(days=horizon_days))
+            ).any()
             frame.at[idx, label_col] = int(in_window)
 
     frame[date_col] = frame[date_col].dt.date

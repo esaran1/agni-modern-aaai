@@ -4,7 +4,11 @@ import numpy as np
 import pandas as pd
 
 
-def assign_spatial_blocks(df: pd.DataFrame, block_size_km: int = 50, grid_km: int = 10) -> pd.DataFrame:
+def assign_spatial_blocks(
+    df: pd.DataFrame,
+    block_size_km: int = 50,
+    grid_km: int = 10,
+) -> pd.DataFrame:
     frame = df.copy()
     if "patch_row" not in frame.columns:
         frame["patch_row"] = frame["patch_id"].str.extract(r"(\d+)_\d+$").astype(int)

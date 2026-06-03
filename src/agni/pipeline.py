@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import pickle
 from pathlib import Path
 
 import pandas as pd
@@ -67,7 +68,9 @@ def target_column_for_task(config: ExperimentConfig) -> str:
         return f"y_occ_{config.data.temporal.horizon_days}d"
     if config.task == "severity":
         return "y_sev_dnbr"
-    raise ValueError("Risk is derived from occurrence and severity predictions, not trained directly")
+    raise ValueError(
+        "Risk is derived from occurrence and severity predictions, not trained directly"
+    )
 
 
 def fit_and_predict(
@@ -116,6 +119,11 @@ def save_training_outputs(
 ) -> None:
     output_dir = Path(config.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    model.save(output_dir / "model.pkl")
+    model_path = output_dir / "model.pkl"
+    if hasattr(model, "save"):
+        model.save(model_path)
+    else:
+        with model_path.open("wb") as handle:
+            pickle.dump(model, handle)
     predictions.to_parquet(output_dir / "predictions.parquet", index=False)
     (output_dir / "metrics.json").write_text(json.dumps(metrics, indent=2), encoding="utf-8")

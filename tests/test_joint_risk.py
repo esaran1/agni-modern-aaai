@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import numpy as np
+import pandas as pd
 import pytest
+import torch
 
-torch = pytest.importorskip("torch")
-
+from agni.experiment_utils import _build_temporal_sequences, _frame_to_joint_tensors
 from agni.models.joint_risk_model import JointRiskTransformer, PairwiseRiskRankingLoss
+
+pytest.importorskip("torch")
 
 
 def test_pairwise_ranking_loss_correct_ranking() -> None:
@@ -36,3 +40,49 @@ def test_joint_loss_components() -> None:
     assert components["occ_loss"] >= 0
     assert components["sev_loss"] >= 0
     assert components["rank_loss"] >= 0
+
+
+def test_temporal_sequences_use_multiple_timesteps() -> None:
+    df = pd.DataFrame(
+        {
+            "patch_id": ["0_0", "0_0", "0_0"],
+            "reference_date": pd.to_datetime(["2020-01-01", "2020-01-08", "2020-01-15"]),
+            "weather_vpd_mean_l7d": [1.0, 2.0, 3.0],
+            "terrain_twi_mean": [0.1, 0.2, 0.3],
+        }
+    )
+    sequences, lengths = _build_temporal_sequences(
+        df,
+        ["weather_vpd_mean_l7d", "terrain_twi_mean"],
+        sequence_length=3,
+    )
+    assert sequences.shape == (3, 3, 2)
+    assert lengths.tolist() == [1, 2, 3]
+    assert np.allclose(sequences[0], [[0.0, 0.0], [0.0, 0.0], [1.0, 0.1]])
+    assert np.allclose(sequences[1], [[0.0, 0.0], [1.0, 0.1], [2.0, 0.2]])
+
+
+def test_joint_tensors_use_full_history_for_validation_rows() -> None:
+    df = pd.DataFrame(
+        {
+            "patch_id": ["0_0", "0_0", "0_0", "0_0"],
+            "reference_date": pd.to_datetime(
+                ["2020-01-01", "2020-01-08", "2020-01-15", "2020-01-22"]
+            ),
+            "split": ["train", "train", "val", "test"],
+            "weather_vpd_mean_l7d": [1.0, 2.0, 3.0, 4.0],
+            "terrain_twi_mean": [0.1, 0.2, 0.3, 0.4],
+            "y_occ_30d": [0, 1, 1, 0],
+            "y_sev_dnbr": [0.0, 0.2, 0.4, 0.1],
+            "y_sev_available": [1, 1, 1, 1],
+        }
+    )
+    x_val, seq_lengths, _, _, _ = _frame_to_joint_tensors(
+        df,
+        ["weather_vpd_mean_l7d", "terrain_twi_mean"],
+        sequence_length=3,
+        subset_index=df.index[df["split"] == "val"],
+    )
+    assert tuple(x_val.shape) == (1, 3, 2)
+    assert seq_lengths.tolist() == [3]
+    assert np.allclose(x_val[0].tolist(), [[1.0, 0.1], [2.0, 0.2], [3.0, 0.3]])

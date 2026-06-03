@@ -6,8 +6,14 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from agni.config import DataConfig, GridConfig, SpatialBlockConfig, SplitConfig, TemporalConfig
-from agni.config import BBox
+from agni.config import (
+    BBox,
+    DataConfig,
+    GridConfig,
+    SpatialBlockConfig,
+    SplitConfig,
+    TemporalConfig,
+)
 from agni.splits.spatial import assign_spatial_blocks
 from agni.splits.spatiotemporal import spatiotemporal_purged_split
 from agni.splits.temporal import validate_temporal_buffer

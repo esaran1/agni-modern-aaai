@@ -14,7 +14,12 @@ def observed_outcome(y_treated, treatment, y_control=None):
     return treatment * y_treated + (1.0 - treatment) * y_control
 
 
-def estimate_ipw_mean_treated_outcome(y_obs, treatment, propensity, clip_min: float = 1e-3) -> float:
+def estimate_ipw_mean_treated_outcome(
+    y_obs,
+    treatment,
+    propensity,
+    clip_min: float = 1e-3,
+) -> float:
     """Horvitz-Thompson/IPW estimate of E[Y(1)]."""
     y_obs = np.asarray(y_obs, dtype=float)
     treatment = np.asarray(treatment, dtype=float)

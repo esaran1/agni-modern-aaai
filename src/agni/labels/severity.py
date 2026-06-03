@@ -8,8 +8,9 @@ def build_severity_labels(
     burn_area_col: str = "modis_burn_date",
     pre_nbr_col: str = "optical_nbr_prefire",
     post_nbr_col: str = "optical_nbr_postfire",
+    occurrence_col: str = "y_occ_30d",
 ) -> pd.DataFrame:
-    has_burn = df[burn_area_col].notna() & (df["y_occ_30d"] == 1)
+    has_burn = df[burn_area_col].notna() & (df[occurrence_col] == 1)
     df = df.copy()
     df["y_sev_available"] = has_burn.astype(int)
     df.loc[has_burn, "y_sev_dnbr"] = (

@@ -27,10 +27,18 @@ def expected_calibration_error(y_true, y_prob, n_bins: int = 10) -> float:
 
 
 def classification_metrics(y_true, y_prob, threshold: float = 0.5) -> dict[str, float]:
-    y_pred = (np.asarray(y_prob) >= threshold).astype(int)
+    y_true = np.asarray(y_true)
+    y_prob = np.asarray(y_prob)
+    y_pred = (y_prob >= threshold).astype(int)
+    if np.unique(y_true).size < 2:
+        roc_auc = float("nan")
+        pr_auc = float("nan")
+    else:
+        roc_auc = float(roc_auc_score(y_true, y_prob))
+        pr_auc = float(average_precision_score(y_true, y_prob))
     return {
-        "roc_auc": float(roc_auc_score(y_true, y_prob)),
-        "pr_auc": float(average_precision_score(y_true, y_prob)),
+        "roc_auc": roc_auc,
+        "pr_auc": pr_auc,
         "f1": float(f1_score(y_true, y_pred)),
         "brier": float(brier_score_loss(y_true, y_prob)),
         "ece": expected_calibration_error(y_true, y_prob),
