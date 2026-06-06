@@ -25,15 +25,29 @@ def dataset_path_for_stage(config: ExperimentConfig, stage: str) -> Path:
     return Path(config.data.processed_dir) / f"{stage}.parquet"
 
 
+def labeled_stage_name(config: ExperimentConfig) -> str:
+    return f"labeled_features_{config.task}"
+
+
+def labeled_dataset_path(config: ExperimentConfig) -> Path:
+    return dataset_path_for_stage(config, labeled_stage_name(config))
+
+
 def load_dataset(config: ExperimentConfig, preferred_stage: str = "features") -> pd.DataFrame:
-    preferred = dataset_path_for_stage(config, preferred_stage)
-    if preferred.exists():
-        return pd.read_parquet(preferred)
+    candidate_stages = [preferred_stage]
+    if preferred_stage == "features":
+        candidate_stages = [labeled_stage_name(config), "features", "dataset"]
+    for stage in candidate_stages:
+        candidate = dataset_path_for_stage(config, stage)
+        if candidate.exists():
+            return pd.read_parquet(candidate)
 
+    preferred = (
+        labeled_dataset_path(config)
+        if preferred_stage == "features"
+        else dataset_path_for_stage(config, preferred_stage)
+    )
     fallback = dataset_path_for_stage(config, "dataset")
-    if fallback.exists():
-        return pd.read_parquet(fallback)
-
     raise FileNotFoundError(f"No dataset found at {preferred} or {fallback}")
 
 
@@ -79,8 +93,18 @@ def fit_and_predict(
 ) -> tuple[object, pd.DataFrame, dict[str, float]]:
     split_df = split_dataset(df, config)
     target_column = target_column_for_task(config)
+    if target_column not in split_df.columns:
+        raise ValueError(
+            f"Target column '{target_column}' not found in dataset. "
+            "Run scripts/build_labels.py before training/evaluation."
+        )
 
     if config.task == "severity":
+        if "y_sev_available" not in split_df.columns:
+            raise ValueError(
+                "Severity training requires y_sev_available labels. "
+                "Run scripts/build_labels.py before training/evaluation."
+            )
         split_df = split_df[split_df["y_sev_available"] == 1].copy()
 
     feature_columns = infer_feature_columns(split_df)

@@ -130,7 +130,12 @@ def test_run_experiment_script_routes_risk_configs_to_risk_pipeline(
     config_path = tmp_path / "risk_run.yaml"
     config_path.write_text(yaml.safe_dump(_risk_config_dict(tmp_path)), encoding="utf-8")
 
-    grid = pd.DataFrame({"patch_id": ["0"]})
+    grid = pd.DataFrame(
+        {
+            "patch_id": ["0"],
+            "geometry_wkt": ["POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))"],
+        }
+    )
     dataset = pd.DataFrame(
         {
             "patch_id": ["0"],
@@ -156,6 +161,7 @@ def test_run_experiment_script_routes_risk_configs_to_risk_pipeline(
     )
     monkeypatch.setattr(module.pd, "read_parquet", lambda path: dataset.copy())
     monkeypatch.setattr(module, "enrich_feature_table", lambda frame, stride_days: frame.copy())
+    monkeypatch.setattr(module, "materialize_labels", lambda **kwargs: split_df.copy())
     monkeypatch.setattr(module, "split_dataset", lambda frame, experiment: split_df.copy())
     monkeypatch.setattr(module, "infer_feature_columns", lambda frame: ["weather_vpd_mean_l7d"])
 

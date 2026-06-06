@@ -99,7 +99,16 @@ class TemporalConfig(BaseModel):
             raise ValueError("reference_start must be <= reference_end")
         if max(self.temporal_windows) > self.lookback_days:
             raise ValueError("max temporal window cannot exceed lookback_days")
+        if not any(window >= self.reference_stride_days for window in self.temporal_windows):
+            raise ValueError(
+                "temporal_windows must include at least one window >= reference_stride_days"
+            )
         return self
+
+    def event_observation_window_days(self) -> int:
+        return min(
+            window for window in self.temporal_windows if window >= self.reference_stride_days
+        )
 
 
 class SplitConfig(BaseModel):

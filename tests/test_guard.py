@@ -10,6 +10,11 @@ def test_leakage_catches_postfire() -> None:
         assert_no_leakage(["postfire_nbr"])
 
 
+def test_leakage_catches_prefire_optical_columns() -> None:
+    with pytest.raises(ValueError):
+        assert_no_leakage(["optical_nbr_prefire"])
+
+
 def test_leakage_catches_label() -> None:
     with pytest.raises(ValueError):
         assert_no_leakage(["y_occ_30d"])

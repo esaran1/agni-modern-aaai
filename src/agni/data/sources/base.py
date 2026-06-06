@@ -10,6 +10,18 @@ def ee_date_subtract(reference_date: str, days: int) -> str:
     return value.isoformat()
 
 
+def month_start_iso(value: str | date) -> str:
+    parsed = date.fromisoformat(value) if isinstance(value, str) else value
+    return parsed.replace(day=1).isoformat()
+
+
+def month_after_iso(value: str | date) -> str:
+    parsed = date.fromisoformat(value) if isinstance(value, str) else value
+    if parsed.month == 12:
+        return date(parsed.year + 1, 1, 1).isoformat()
+    return date(parsed.year, parsed.month + 1, 1).isoformat()
+
+
 class EESourceAdapter(ABC):
     """Base class for Earth Engine data source adapters."""
 

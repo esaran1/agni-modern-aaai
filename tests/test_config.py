@@ -130,3 +130,14 @@ def test_experiment_and_model_tasks_must_be_semantically_compatible(
 
     with pytest.raises(ValueError, match=message):
         load_experiment_config(config_path)
+
+
+def test_temporal_windows_must_cover_reference_stride(tmp_path: Path) -> None:
+    config_dict = _base_config(tmp_path)
+    config_dict["data"]["temporal"]["reference_stride_days"] = 7
+    config_dict["data"]["temporal"]["temporal_windows"] = [3, 5]
+    config_path = tmp_path / "invalid_windows.yaml"
+    config_path.write_text(yaml.safe_dump(config_dict), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="temporal_windows must include at least one window"):
+        load_experiment_config(config_path)

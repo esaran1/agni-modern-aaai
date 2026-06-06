@@ -27,7 +27,10 @@ class DatasetBuildResult:
 def iter_reference_dates(config: DataConfig) -> list[pd.Timestamp]:
     dates = []
     current = pd.Timestamp(config.temporal.reference_start)
-    end = pd.Timestamp(config.temporal.reference_end)
+    event_window_days = config.temporal.event_observation_window_days()
+    end = pd.Timestamp(config.temporal.reference_end) + timedelta(
+        days=config.temporal.horizon_days + event_window_days
+    )
     stride = timedelta(days=config.temporal.reference_stride_days)
     while current <= end:
         dates.append(current)
@@ -40,7 +43,10 @@ def build_dataset(
     patch_df: pd.DataFrame,
     adapters: Iterable[Any],
     output_name: str = "dataset.parquet",
+    strict: bool = True,
 ) -> DatasetBuildResult:
+    adapters = list(adapters)
+    event_window_days = config.temporal.event_observation_window_days()
     output_dir = Path(config.processed_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     dataset_path = output_dir / output_name
@@ -48,6 +54,8 @@ def build_dataset(
 
     rows: list[dict[str, Any]] = []
     reference_dates = iter_reference_dates(config)
+
+    adapter_names = [adapter.__class__.__name__ for adapter in adapters]
 
     for patch in patch_df.to_dict(orient="records"):
         geometry = wkt.loads(patch["geometry_wkt"])
@@ -71,13 +79,13 @@ def build_dataset(
                         )
                     )
                 except Exception as exc:
-                    LOGGER.warning(
-                        "Adapter %s failed for patch=%s date=%s: %s",
-                        adapter.__class__.__name__,
-                        patch["patch_id"],
-                        reference_date.date(),
-                        exc,
+                    message = (
+                        f"Adapter {adapter.__class__.__name__} failed for "
+                        f"patch={patch['patch_id']} date={reference_date.date()}: {exc}"
                     )
+                    if strict:
+                        raise RuntimeError(message) from exc
+                    LOGGER.warning(message)
             rows.append(row)
 
     dataset = pd.DataFrame(rows)
@@ -87,7 +95,15 @@ def build_dataset(
         dataset_path=dataset_path,
         config_dict=config.model_dump(mode="json"),
         row_count=len(dataset),
-        extra={"output_name": output_name},
+        extra={
+            "output_name": output_name,
+            "adapter_names": adapter_names,
+            "reference_date_count": len(reference_dates),
+            "future_padding_days": (
+                config.temporal.horizon_days + event_window_days
+            ),
+            "strict_mode": strict,
+        },
     )
     manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     return DatasetBuildResult(

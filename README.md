@@ -25,7 +25,7 @@ Key directories:
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -e .[dev]
+pip install -e '.[dev]'
 pytest
 ```
 
@@ -34,11 +34,12 @@ Use Python 3.11 or 3.12 for this repository. The pinned scientific stack is not 
 Example workflow:
 
 ```bash
-python scripts/build_grid.py --config configs/experiments/kalimantan_pilot.yaml
-python scripts/build_dataset.py --config configs/experiments/kalimantan_pilot.yaml
-python scripts/enrich_features.py --config configs/experiments/kalimantan_pilot.yaml
-python scripts/train.py --config configs/experiments/kalimantan_pilot.yaml
-python scripts/evaluate.py --config configs/experiments/kalimantan_pilot.yaml
+python scripts/build_grid.py configs/experiments/kalimantan_pilot.yaml
+python scripts/build_dataset.py configs/experiments/kalimantan_pilot.yaml
+python scripts/enrich_features.py configs/experiments/kalimantan_pilot.yaml
+python scripts/build_labels.py configs/experiments/kalimantan_pilot.yaml
+python scripts/train.py configs/experiments/kalimantan_pilot.yaml
+python scripts/evaluate.py configs/experiments/kalimantan_pilot.yaml
 ```
 
 ## Notes
@@ -46,3 +47,5 @@ python scripts/evaluate.py --config configs/experiments/kalimantan_pilot.yaml
 - All experiment parameters live in YAML and deserialize into Pydantic models.
 - Feature leakage protection is enforced before every model fit.
 - External integrations such as Earth Engine, OSM, and local peat rasters are structured behind adapters so the core pipeline remains testable offline.
+- Label builds are task-specific and write separate artifacts such as `labeled_features_occurrence.parquet` and `labeled_features_risk.parquet`.
+- `scripts/run_experiment.py` performs the full raw-data-to-labeled-training pipeline in one command.

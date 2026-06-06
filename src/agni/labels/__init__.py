@@ -1,1 +1,1 @@
-"""Label builders for occurrence and severity tasks."""
+"""Label builders and materializers for occurrence and severity tasks."""

@@ -29,7 +29,11 @@ def build_adapters(source_configs):
             continue
         adapter_cls = ADAPTER_REGISTRY.get(source.name)
         if adapter_cls is None:
-            continue
+            available = ", ".join(sorted(ADAPTER_REGISTRY))
+            raise ValueError(
+                f"Unknown enabled data source '{source.name}'. "
+                f"Available sources are: {available}."
+            )
         adapters.append(adapter_cls(**source.params) if source.params else adapter_cls())
     return adapters
 
