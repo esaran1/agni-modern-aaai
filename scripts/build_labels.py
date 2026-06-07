@@ -8,6 +8,7 @@ import typer
 
 from agni.config import load_experiment_config
 from agni.data.manifest import build_dataset_manifest, hash_file
+from agni.data.sources.ee_session import initialize_earth_engine
 from agni.labels.materialize import extract_sentinel2_severity, materialize_labels
 from agni.pipeline import dataset_path_for_stage, labeled_dataset_path
 
@@ -17,8 +18,21 @@ LOGGER = logging.getLogger(__name__)
 
 
 @app.command()
-def main(config: str, severity_window_days: int = 30) -> None:
+def main(
+    config: str,
+    severity_window_days: int = 30,
+    ee_project: str = "",
+    ee_key: str = "",
+    high_volume: bool = True,
+) -> None:
     experiment = load_experiment_config(config)
+    # Severity/risk label materialization calls Earth Engine; occurrence-only is offline.
+    if experiment.task in {"severity", "risk"}:
+        initialize_earth_engine(
+            project=ee_project or None,
+            high_volume=high_volume,
+            key_file=ee_key or None,
+        )
     grid_path = dataset_path_for_stage(experiment, "grid")
     features_path = dataset_path_for_stage(experiment, "features")
     if not grid_path.exists():

@@ -153,7 +153,7 @@ def test_run_experiment_script_routes_risk_configs_to_risk_pipeline(
     monkeypatch.setattr(
         module,
         "build_dataset",
-        lambda data_config, built_grid, adapters, output_name: type(
+        lambda data_config, built_grid, adapters, output_name, **kwargs: type(
             "DatasetResult",
             (),
             {"dataset_path": tmp_path / "processed" / "dataset.parquet"},

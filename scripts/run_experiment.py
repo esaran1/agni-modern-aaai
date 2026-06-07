@@ -12,6 +12,7 @@ from agni.data.builder import build_dataset
 from agni.data.grid import build_patch_grid
 from agni.data.manifest import build_dataset_manifest, hash_file
 from agni.data.sources import build_adapters
+from agni.data.sources.ee_session import initialize_earth_engine
 from agni.experiment_utils import fit_risk_pipeline
 from agni.features.guard import infer_feature_columns
 from agni.labels.materialize import extract_sentinel2_severity, materialize_labels
@@ -29,8 +30,20 @@ LOGGER = logging.getLogger(__name__)
 
 
 @app.command()
-def main(config: str) -> None:
+def main(
+    config: str,
+    max_workers: int = 8,
+    max_retries: int = 3,
+    ee_project: str = "",
+    ee_key: str = "",
+    high_volume: bool = True,
+) -> None:
     experiment = load_experiment_config(config)
+    initialize_earth_engine(
+        project=ee_project or None,
+        high_volume=high_volume,
+        key_file=ee_key or None,
+    )
     grid = build_patch_grid(experiment.data.grid.bbox, experiment.data.grid.grid_km)
     Path(experiment.data.processed_dir).mkdir(parents=True, exist_ok=True)
     grid.to_parquet(Path(experiment.data.processed_dir) / "grid.parquet", index=False)
@@ -40,6 +53,8 @@ def main(config: str) -> None:
         grid,
         build_adapters(experiment.data.sources),
         output_name="dataset.parquet",
+        max_workers=max_workers,
+        max_retries=max_retries,
     )
     features = enrich_feature_table(
         pd.read_parquet(dataset_result.dataset_path),

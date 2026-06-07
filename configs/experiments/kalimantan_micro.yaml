@@ -1,0 +1,55 @@
+name: kalimantan_micro
+task: occurrence
+# Tiny smoke-test config: ~1 deg box over Central Kalimantan peatlands during the
+# 2019 fire season, coarse grid and a short window. Purpose is to surface live
+# Earth Engine auth / quota / adapter bugs in minutes, NOT to produce results.
+data:
+  grid:
+    grid_km: 25
+    bbox:
+      lon_min: 113.0
+      lon_max: 114.0
+      lat_min: -2.8
+      lat_max: -1.8
+  temporal:
+    reference_start: 2019-08-01
+    reference_end: 2019-09-30
+    reference_stride_days: 7
+    lookback_days: 30
+    temporal_windows: [7, 14, 30]
+    horizon_days: 14
+  split:
+    buffer_days: 14
+    train_end: 2019-08-20
+    val_end: 2019-09-05
+    test_end: 2019-09-30
+  sources:
+    - name: era5
+      enabled: true
+      params: {}
+    - name: sentinel2
+      enabled: true
+      params: {}
+    - name: srtm
+      enabled: true
+      params: {}
+    - name: modis_fire
+      enabled: true
+      params: {}
+    - name: modis_burn
+      enabled: true
+      params: {}
+  raw_dir: data/raw
+  processed_dir: data/processed_micro
+model:
+  name: xgboost
+  task: classification
+  params:
+    n_estimators: 100
+    max_depth: 4
+    learning_rate: 0.1
+    random_state: 42
+evaluation:
+  bootstrap_samples: 100
+  confidence_level: 0.95
+output_dir: outputs/kalimantan_micro

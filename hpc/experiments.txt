@@ -1,0 +1,5 @@
+# One experiment config per line; consumed by hpc/experiments_array.slurm.
+# Array index 0 = first non-comment line, etc. Set --array=0-(N-1) to match.
+# Replace these with your real configs (and add per-seed copies for significance).
+configs/experiments/kalimantan_pilot.yaml
+configs/experiments/national_aaai.yaml

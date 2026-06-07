@@ -5,7 +5,7 @@ __pycache__/
 *.egg-info/
 .venv/
 
-data/raw/
-data/processed/
-data/external/
-outputs/
+# Built data and experiment artifacts are reproducible from configs; never commit them.
+# Anchored to repo root so they do not match the src/agni/data/ source package.
+/data/
+/outputs/
