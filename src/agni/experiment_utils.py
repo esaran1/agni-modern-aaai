@@ -392,6 +392,7 @@ def train_joint_risk_variant(
 
     params = dict(model_params)
     params["lambda_rank"] = lambda_rank
+    torch.manual_seed(int(params.get("random_state", params.get("seed", 42))))
     epochs = int(params.get("epochs", 10))
     patience = int(params.get("patience", 3))
     batch_size = int(params.get("batch_size", 64))

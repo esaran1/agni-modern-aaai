@@ -6,11 +6,13 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 import yaml
 
 from agni.evaluation.bootstrap import bootstrap_metric
-from agni.evaluation.delong import delong_roc_test
-from agni.evaluation.metrics import classification_metrics
+from agni.evaluation.delong import delong_roc_test, delong_roc_variance
+from agni.evaluation.metrics import classification_metrics, regression_metrics
+from agni.risk.expected_risk import evaluate_risk_ranking
 
 _EVALUATE_SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "evaluate.py"
 _EVALUATE_SPEC = importlib.util.spec_from_file_location("evaluate_script", _EVALUATE_SCRIPT)
@@ -43,6 +45,56 @@ def test_classification_metrics_handles_single_class_targets() -> None:
     assert np.isnan(metrics["roc_auc"])
     assert np.isnan(metrics["pr_auc"])
     assert "f1" in metrics
+
+
+def test_classification_metrics_report_precision_recall() -> None:
+    y_true = np.array([0, 0, 1, 1, 0, 1])
+    y_prob = np.array([0.1, 0.2, 0.8, 0.9, 0.4, 0.7])
+    metrics = classification_metrics(y_true, y_prob)
+    assert metrics["precision"] == 1.0
+    assert metrics["recall"] == 1.0
+
+
+def test_regression_metrics_include_r2_and_bias() -> None:
+    y_true = np.array([0.0, 0.2, 0.4, 0.6, 0.8])
+    y_pred = y_true + 0.1
+    metrics = regression_metrics(y_true, y_pred)
+    assert set(metrics) == {"rmse", "mae", "r2", "bias"}
+    assert metrics["bias"] == pytest.approx(0.1)
+    assert metrics["r2"] == pytest.approx(0.875)
+
+
+def test_regression_metrics_r2_nan_for_constant_target() -> None:
+    metrics = regression_metrics(np.array([0.5, 0.5, 0.5]), np.array([0.4, 0.5, 0.6]))
+    assert np.isnan(metrics["r2"])
+
+
+def test_delong_variance_single_classifier() -> None:
+    y_true = np.array([0, 0, 1, 1, 0, 1, 0, 1])
+    score = np.array([0.1, 0.2, 0.7, 0.6, 0.4, 0.55, 0.45, 0.65])
+    auc, variance = delong_roc_variance(y_true, score)
+    assert 0.0 <= auc <= 1.0
+    assert variance >= 0.0
+
+
+def test_risk_ranking_reports_population_metrics() -> None:
+    rng = np.random.default_rng(0)
+    n = 200
+    risk = rng.uniform(0.0, 1.0, size=n)
+    # Occurrence and severity both increase with the risk score.
+    occurrence = (risk > 0.6).astype(int)
+    severity = np.where(occurrence == 1, risk, np.nan)
+    metrics = evaluate_risk_ranking(
+        pd.Series(risk),
+        pd.Series(severity),
+        pd.Series(occurrence),
+    )
+    assert metrics["n_test"] == n
+    assert 0.0 <= metrics["precision_at_10pct"] <= 1.0
+    # A risk-aligned ranking should beat the base rate at the top of the list.
+    assert metrics["precision_at_10pct"] >= occurrence.mean()
+    assert 0.0 <= metrics["severity_capture_at_20pct"] <= 1.0
+    assert "spearman_rho" in metrics
 
 
 def test_delong_test_runs() -> None:

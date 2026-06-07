@@ -141,6 +141,7 @@ if nn is not None:
         def __init__(self, model: JointRiskTransformer, config: dict):
             self.model = model
             self.config = config
+            torch.manual_seed(int(config.get("random_state", config.get("seed", 42))))
             self.optimizer = torch.optim.Adam(
                 model.parameters(),
                 lr=config.get("lr", 3e-4),

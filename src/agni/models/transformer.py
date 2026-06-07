@@ -40,6 +40,8 @@ class TransformerModel(BaseModel):
             self.model = estimator
             return
 
+        seed = int(self.config.get("params", {}).get("random_state", 42))
+        torch.manual_seed(seed)
         hidden_dim = int(self.config.get("params", {}).get("hidden_dim", 64))
         n_heads = int(self.config.get("params", {}).get("n_heads", 4))
         n_layers = int(self.config.get("params", {}).get("n_layers", 2))

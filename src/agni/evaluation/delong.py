@@ -55,7 +55,9 @@ def delong_roc_variance(y_true, y_score) -> tuple[float, float]:
     label_1_count = int(y_true.sum())
     predictions_sorted = y_score[np.newaxis, order]
     aucs, cov = _fast_delong(predictions_sorted, label_1_count)
-    return float(aucs[0]), float(cov if np.isscalar(cov) else cov[0, 0])
+    # np.cov collapses a single classifier to a 0-d array; normalize to 2-d.
+    cov_matrix = np.atleast_2d(np.asarray(cov, dtype=float))
+    return float(aucs[0]), float(cov_matrix[0, 0])
 
 
 def delong_roc_test(y_true, y_score_a, y_score_b) -> dict[str, float]:

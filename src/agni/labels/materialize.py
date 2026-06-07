@@ -215,7 +215,7 @@ def infer_observed_burn_timestamp(value: object) -> date | None:
         return value
     if isinstance(value, str):
         return pd.Timestamp(value).date()
-    if isinstance(value, (int, float)):
+    if isinstance(value, int | float):
         numeric_value = float(value)
         if numeric_value <= 0:
             return None
