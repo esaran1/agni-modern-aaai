@@ -8,9 +8,29 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 
-from agni.data.builder import build_dataset
+from agni.data.builder import _is_transient_error, build_dataset
 from agni.data.sources import build_adapters
 from agni.data.sources.base import month_after_iso, month_start_iso
+
+
+def test_transient_classifier_retries_only_genuine_transients() -> None:
+    # Network/quota/5xx style errors are retryable.
+    assert _is_transient_error(TimeoutError("read timed out"))
+    assert _is_transient_error(ConnectionError("connection reset by peer"))
+    assert _is_transient_error(RuntimeError("HTTP 503 service unavailable"))
+    assert _is_transient_error(RuntimeError("Too Many Requests (429)"))
+    assert _is_transient_error(RuntimeError("Earth Engine capacity exceeded; try again later"))
+
+    # Deterministic Earth Engine bugs must fail fast, not burn minutes of backoff.
+    class EEException(Exception):  # noqa: N818
+        pass
+
+    band_error = EEException(
+        "Image.select: Band pattern 'B12' was applied to an Image with no bands."
+    )
+    assert not _is_transient_error(band_error)
+    assert not _is_transient_error(EEException("User memory limit exceeded."))
+    assert not _is_transient_error(ValueError("unknown column"))
 
 
 def _data_config(tmp_path: Path) -> dict:

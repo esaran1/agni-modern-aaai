@@ -27,8 +27,11 @@ _TRANSIENT_KEYWORDS = (
     "temporarily",
     "rate limit",
     "too many requests",
+    "429",
     "quota",
     "deadline",
+    "capacity",
+    "try again",
     "connection reset",
     "connection aborted",
     "502",
@@ -62,10 +65,13 @@ def iter_reference_dates(config: DataConfig) -> list[pd.Timestamp]:
 
 
 def _is_transient_error(exc: Exception) -> bool:
+    # Classify by message content, not exception class. Earth Engine raises a single
+    # ``ee.EEException`` type for *both* transient issues (rate limits, 5xx, timeouts)
+    # and deterministic bugs (e.g. selecting a band from an empty image). Retrying the
+    # latter just wastes minutes of backoff before failing, so only message keywords
+    # (or genuine timeout/connection exceptions) count as transient. The outer build
+    # loop resumes from shards, so an occasional misclassified transient is recoverable.
     if isinstance(exc, TimeoutError | ConnectionError):
-        return True
-    name = exc.__class__.__name__.lower()
-    if "eeexception" in name or "httperror" in name or "timeout" in name:
         return True
     message = str(exc).lower()
     return any(keyword in message for keyword in _TRANSIENT_KEYWORDS)

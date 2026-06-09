@@ -6,8 +6,8 @@ import pandas as pd
 def build_severity_labels(
     df: pd.DataFrame,
     burn_area_col: str = "event_date",
-    pre_nbr_col: str = "optical_nbr_prefire",
-    post_nbr_col: str = "optical_nbr_postfire",
+    pre_nbr_col: str = "label_nbr_prefire",
+    post_nbr_col: str = "label_nbr_postfire",
     occurrence_col: str | None = None,
 ) -> pd.DataFrame:
     if occurrence_col is None:

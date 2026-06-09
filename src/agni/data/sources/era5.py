@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from agni.data.sources.base import EESourceAdapter, ee_date_subtract
+from agni.data.sources.base import EESourceAdapter, ee_date_subtract, materialize_ee
 
 
 class ERA5LandAdapter(EESourceAdapter):
@@ -52,4 +52,4 @@ class ERA5LandAdapter(EESourceAdapter):
                 features[f"weather_{band}_std_l{window}d"] = stats.get(f"{band}_stdDev")
                 features[f"weather_{band}_min_l{window}d"] = stats.get(f"{band}_min")
                 features[f"weather_{band}_max_l{window}d"] = stats.get(f"{band}_max")
-        return features
+        return materialize_ee(features)

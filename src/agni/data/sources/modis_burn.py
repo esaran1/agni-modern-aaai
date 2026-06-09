@@ -3,8 +3,10 @@ from __future__ import annotations
 from agni.data.sources.base import (
     EESourceAdapter,
     ee_date_subtract,
+    materialize_ee,
     month_after_iso,
     month_start_iso,
+    ms_timestamp_to_iso_date,
 )
 
 
@@ -53,21 +55,6 @@ class MODISBurnAdapter(EESourceAdapter):
             timestamps = interval_burn_timestamps(image, start_date, end_date)
             return timestamps.mask().unmask(0).rename("burned")
 
-        def attach_patch_burn_timestamp(image, start_date: str, end_date: str):
-            image = ee.Image(image)
-            valid_timestamps = interval_burn_timestamps(image, start_date, end_date)
-            min_burn_timestamp = valid_timestamps.reduceRegion(
-                reducer=ee.Reducer.min(),
-                geometry=ee_geometry,
-                scale=500,
-            ).get("burn_timestamp")
-            return image.set("patch_burn_timestamp", min_burn_timestamp)
-
-        def timestamp_to_iso_date(timestamp):
-            if timestamp is None:
-                return None
-            return ee.Date(timestamp).format("YYYY-MM-dd")
-
         for window in temporal_windows:
             interval_start = ee_date_subtract(reference_date, window)
             collection = (
@@ -77,13 +64,6 @@ class MODISBurnAdapter(EESourceAdapter):
                     month_after_iso(reference_date),
                 )
                 .filterBounds(ee_geometry)
-            )
-            collection_with_timestamps = collection.map(
-                lambda image, start=interval_start, end=reference_date: attach_patch_burn_timestamp(
-                    image,
-                    start,
-                    end,
-                )
             )
             burn_presence = collection.map(
                 lambda image, start=interval_start, end=reference_date: interval_burn_mask(
@@ -108,15 +88,14 @@ class MODISBurnAdapter(EESourceAdapter):
                 geometry=ee_geometry,
                 scale=500,
             )
-            earliest_burn_timestamp = earliest_burn.get("burn_timestamp")
+            # Count, timestamp and date all derive from the same masked interval burn
+            # pixels, so a positive burn fraction always carries a resolvable date.
+            # The timestamp is materialized below and converted to an ISO date in Python
+            # so a null (no-burn) timestamp cannot crash a server-side ee.Date.format.
+            earliest_burn_ts = earliest_burn.get("burn_timestamp")
             features[f"temporal_burn_count_l{window}d"] = burn_fraction.get("burned")
-            features[f"temporal_burn_date_l{window}d"] = timestamp_to_iso_date(
-                earliest_burn_timestamp
-            )
-            burn_timestamp_col = f"temporal_burn_timestamp_l{window}d"
-            features[burn_timestamp_col] = collection_with_timestamps.aggregate_min(
-                "patch_burn_timestamp",
-            )
+            features[f"temporal_burn_timestamp_l{window}d"] = earliest_burn_ts
+            features[f"_earliest_burn_ts_l{window}d"] = earliest_burn_ts
 
         lookback_start = ee_date_subtract(reference_date, lookback_days)
         observed_collection = (
@@ -126,7 +105,6 @@ class MODISBurnAdapter(EESourceAdapter):
                 month_start_iso(lookback_start),
                 month_after_iso(reference_date),
             )
-            .map(lambda image: attach_patch_burn_timestamp(image, lookback_start, reference_date))
         )
         observed_burn = (
             observed_collection
@@ -134,9 +112,15 @@ class MODISBurnAdapter(EESourceAdapter):
             .min()
             .reduceRegion(reducer=ee.Reducer.min(), geometry=ee_geometry, scale=500)
         )
-        observed_burn_timestamp = observed_burn.get("burn_timestamp")
-        features["modis_burn_date"] = timestamp_to_iso_date(observed_burn_timestamp)
-        features["modis_burn_timestamp"] = observed_collection.aggregate_min(
-            "patch_burn_timestamp"
-        )
-        return features
+        observed_earliest_burn_ts = observed_burn.get("burn_timestamp")
+        features["modis_burn_timestamp"] = observed_earliest_burn_ts
+        features["_observed_earliest_burn_ts"] = observed_earliest_burn_ts
+
+        resolved = materialize_ee(features)
+
+        for window in temporal_windows:
+            earliest = resolved.pop(f"_earliest_burn_ts_l{window}d", None)
+            resolved[f"temporal_burn_date_l{window}d"] = ms_timestamp_to_iso_date(earliest)
+        observed_earliest = resolved.pop("_observed_earliest_burn_ts", None)
+        resolved["modis_burn_date"] = ms_timestamp_to_iso_date(observed_earliest)
+        return resolved

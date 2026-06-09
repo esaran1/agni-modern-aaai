@@ -63,8 +63,8 @@ def test_materialize_labels_uses_extractors_and_writes_expected_columns() -> Non
     second = labeled.iloc[1]
     assert first["y_occ_14d"] == 1
     assert str(first["event_date"]).startswith("2020-01-10")
-    assert first["optical_nbr_prefire"] == 0.6
-    assert first["optical_nbr_postfire"] == 0.2
+    assert first["label_nbr_prefire"] == 0.6
+    assert first["label_nbr_postfire"] == 0.2
     assert first["y_sev_available"] == 1
     assert first["y_sev_dnbr"] == pytest.approx(0.4)
     assert first["y_sev_class"] == "high"
@@ -120,8 +120,8 @@ def test_materialize_labels_derives_occurrence_and_severity_locally() -> None:
     assert pd.isna(first["y_sev_dnbr"])
     assert second["y_occ_14d"] == 1
     assert str(second["event_date"]).startswith("2020-01-20")
-    assert second["optical_nbr_prefire"] == 0.6
-    assert second["optical_nbr_postfire"] == 0.2
+    assert second["label_nbr_prefire"] == 0.6
+    assert second["label_nbr_postfire"] == 0.2
     assert second["y_sev_available"] == 1
     assert second["y_sev_dnbr"] == pytest.approx(0.4)
     assert second["y_sev_class"] == "high"
@@ -381,6 +381,13 @@ def test_modis_burn_adapter_includes_overlapping_start_month(
         def get(self, key):
             return None
 
+    class FakeDictionary:
+        def __init__(self, mapping):
+            self.mapping = mapping
+
+        def getInfo(self):  # noqa: N802
+            return dict(self.mapping)
+
     class FakeImage:
         def reduceRegion(self, **kwargs):  # noqa: N802
             return FakeRegionResult()
@@ -409,6 +416,7 @@ def test_modis_burn_adapter_includes_overlapping_start_month(
         Geometry=lambda geo: geo,
         ImageCollection=lambda collection_id: FakeCollection(),
         Reducer=SimpleNamespace(mean=lambda: None, min=lambda: None),
+        Dictionary=FakeDictionary,
     )
     monkeypatch.setitem(sys.modules, "ee", fake_ee)
 
@@ -471,8 +479,8 @@ def test_build_severity_labels_defaults_to_event_date_contract() -> None:
     frame = pd.DataFrame(
         {
             "event_date": [date(2020, 1, 10), pd.NaT],
-            "optical_nbr_prefire": [0.7, 0.5],
-            "optical_nbr_postfire": [0.2, 0.4],
+            "label_nbr_prefire": [0.7, 0.5],
+            "label_nbr_postfire": [0.2, 0.4],
             "y_occ_14d": [1, 0],
         }
     )
@@ -488,8 +496,8 @@ def test_build_severity_labels_rejects_missing_event_columns() -> None:
     frame = pd.DataFrame(
         {
             "modis_burn_date": [12.0],
-            "optical_nbr_prefire": [0.6],
-            "optical_nbr_postfire": [0.3],
+            "label_nbr_prefire": [0.6],
+            "label_nbr_postfire": [0.3],
             "y_occ_14d": [1],
         }
     )
@@ -502,8 +510,8 @@ def test_build_severity_labels_requires_explicit_occurrence_column_when_ambiguou
     frame = pd.DataFrame(
         {
             "event_date": [date(2020, 1, 10)],
-            "optical_nbr_prefire": [0.7],
-            "optical_nbr_postfire": [0.2],
+            "label_nbr_prefire": [0.7],
+            "label_nbr_postfire": [0.2],
             "y_occ_14d": [1],
             "y_occ_30d": [1],
         }

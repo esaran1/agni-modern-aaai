@@ -1,13 +1,41 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 
 def ee_date_subtract(reference_date: str, days: int) -> str:
     value = date.fromisoformat(reference_date) - timedelta(days=days)
     return value.isoformat()
+
+
+def materialize_ee(features: dict[str, Any]) -> dict[str, Any]:
+    """Resolve a mapping of server-side Earth Engine values to client-side scalars.
+
+    Adapters assemble their feature dicts lazily: each value is an unevaluated
+    Earth Engine ``ComputedObject`` (e.g. the result of ``reduceRegion(...).get(...)``).
+    Those objects cannot be written to parquet and must be pulled to the client with
+    ``getInfo``. Wrapping the whole mapping in a single ``ee.Dictionary`` and calling
+    ``getInfo`` once materializes every value in **one** network round trip, instead of
+    one round trip per band/window, which is both correct and dramatically cheaper at
+    scale. Earth Engine ``null`` values come back as Python ``None``.
+    """
+    if not features:
+        return {}
+    import ee
+
+    return dict(ee.Dictionary(features).getInfo())
+
+
+def ms_timestamp_to_iso_date(timestamp_ms: float | int | None) -> str | None:
+    """Convert an epoch-milliseconds timestamp (UTC) to an ISO ``YYYY-MM-DD`` date.
+
+    Returns ``None`` for ``None`` so masked/absent burn timestamps stay null.
+    """
+    if timestamp_ms is None:
+        return None
+    return datetime.fromtimestamp(timestamp_ms / 1000.0, tz=UTC).date().isoformat()
 
 
 def month_start_iso(value: str | date) -> str:

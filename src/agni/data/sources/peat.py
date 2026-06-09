@@ -4,7 +4,7 @@ from pathlib import Path
 
 from rasterio.mask import mask as rio_mask
 
-from agni.data.sources.base import EESourceAdapter
+from agni.data.sources.base import EESourceAdapter, materialize_ee
 
 
 class PeatExtentAdapter(EESourceAdapter):
@@ -31,7 +31,7 @@ class PeatExtentAdapter(EESourceAdapter):
                 geometry=ee_geometry,
                 scale=250,
             )
-            return {"peat_fraction": peat_fraction.get("peat")}
+            return materialize_ee({"peat_fraction": peat_fraction.get("peat")})
         except Exception:
             return {"peat_fraction": None}
 

@@ -1,0 +1,83 @@
+name: kalimantan_regional
+task: occurrence
+# Regional pilot over the Central Kalimantan peatland fire core (Palangka Raya /
+# Sebangau / ex-Mega Rice Project), the most fire-prone peatland in Indonesia. This is
+# a defensible, publishable study area that is far cheaper to build than the national
+# grid while still capturing the dominant peat-fire dynamics.
+#
+# COST KNOBS (the build is Earth Engine quota-bound, not CPU-bound):
+#   * grid_km            : 10 km here (~700 patches). Raise to 15-20 for a ~2-4x faster
+#                          first pass; lower only if you have HPC/long wall-clock.
+#   * bbox               : ~3 deg x 2 deg. Widen to all of Kalimantan
+#                          (lon 108.5-118.5, lat -3.5..3.5) for the full pilot.
+#   * reference_start/end: spans the 2019 (severe) and 2020 fire seasons so the temporal
+#                          split has a genuine future holdout. Shorten for a fast pass.
+#   * reference_stride_days: 7 d. Increase to 14 to roughly halve the number of dates.
+# Always build with scripts/build_dataset.py --resume (checkpoints per patch).
+data:
+  grid:
+    grid_km: 10
+    bbox:
+      lon_min: 112.0
+      lon_max: 115.0
+      lat_min: -3.4
+      lat_max: -1.4
+  temporal:
+    reference_start: 2019-06-01
+    reference_end: 2020-12-31
+    reference_stride_days: 7
+    lookback_days: 60
+    temporal_windows: [3, 7, 14, 30, 60]
+    horizon_days: 30
+  split:
+    buffer_days: 30
+    train_end: 2019-12-31
+    val_end: 2020-06-30
+    test_end: 2020-12-31
+  spatial_blocks:
+    block_size_km: 50
+    n_folds: 5
+    seed: 42
+  sources:
+    - name: era5
+      enabled: true
+      params: {}
+    - name: sentinel2
+      enabled: true
+      params: {}
+    - name: srtm
+      enabled: true
+      params: {}
+    - name: modis_fire
+      enabled: true
+      params: {}
+    - name: modis_burn
+      enabled: true
+      params: {}
+    # Optional extra sources (validated code paths, extra EE cost / asset access):
+    # - name: dynamic_world  # land-cover fractions; doubles optical-style cost
+    #   enabled: true
+    #   params: {}
+    # - name: peat           # CIFOR peat extent; requires access to the EE asset
+    #   enabled: true
+    #   params: {}
+    # - name: worldpop       # population; only covers years in the WorldPop release
+    #   enabled: true
+    #   params: {}
+  raw_dir: data/raw
+  processed_dir: data/processed_regional
+model:
+  name: xgboost
+  task: classification
+  params:
+    n_estimators: 300
+    max_depth: 6
+    learning_rate: 0.05
+    subsample: 0.9
+    colsample_bytree: 0.9
+    reg_lambda: 1.0
+    random_state: 42
+evaluation:
+  bootstrap_samples: 500
+  confidence_level: 0.95
+output_dir: outputs/kalimantan_regional

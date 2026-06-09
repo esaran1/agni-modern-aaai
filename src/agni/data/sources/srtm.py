@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from agni.data.sources.base import EESourceAdapter
+from agni.data.sources.base import EESourceAdapter, materialize_ee
 
 
 class SRTMAdapter(EESourceAdapter):
@@ -45,13 +45,15 @@ class SRTMAdapter(EESourceAdapter):
             scale=90,
         )
 
-        return {
-            "terrain_elevation_mean": elev_stats.get("elevation_mean"),
-            "terrain_elevation_std": elev_stats.get("elevation_stdDev"),
-            "terrain_elevation_min": elev_stats.get("elevation_min"),
-            "terrain_elevation_max": elev_stats.get("elevation_max"),
-            "terrain_slope_mean": slope_stats.get("slope_mean"),
-            "terrain_slope_std": slope_stats.get("slope_stdDev"),
-            "terrain_twi_mean": twi_stats.get("twi_mean"),
-            "terrain_twi_std": twi_stats.get("twi_stdDev"),
-        }
+        return materialize_ee(
+            {
+                "terrain_elevation_mean": elev_stats.get("elevation_mean"),
+                "terrain_elevation_std": elev_stats.get("elevation_stdDev"),
+                "terrain_elevation_min": elev_stats.get("elevation_min"),
+                "terrain_elevation_max": elev_stats.get("elevation_max"),
+                "terrain_slope_mean": slope_stats.get("slope_mean"),
+                "terrain_slope_std": slope_stats.get("slope_stdDev"),
+                "terrain_twi_mean": twi_stats.get("twi_mean"),
+                "terrain_twi_std": twi_stats.get("twi_stdDev"),
+            }
+        )

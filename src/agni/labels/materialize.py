@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -10,6 +11,8 @@ import pandas as pd
 from shapely import wkt
 
 from agni.data.sources.base import month_after_iso, month_start_iso
+
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -140,13 +143,15 @@ def _sentinel_nbr_mean(geometry, start_date: date, end_date: date) -> float | No
         return None
 
     nbr = collection.median().normalizedDifference(["B8", "B12"]).rename("nbr")
+    # Materialize first: a fully-masked region returns Earth Engine null -> Python None,
+    # so resolve before float() to avoid float(None) on cloud-saturated patches.
     stat = nbr.reduceRegion(
         reducer=ee.Reducer.mean(),
         geometry=ee_geometry,
         scale=30,
         maxPixels=1_000_000,
-    ).get("nbr")
-    return None if stat is None else float(stat.getInfo())
+    ).get("nbr").getInfo()
+    return None if stat is None else float(stat)
 
 
 def extract_sentinel2_severity(
@@ -264,48 +269,49 @@ def derive_observed_events(
         )
 
     burn_count_col = f"temporal_burn_count_l{event_window}d"
-    fire_count_col = f"temporal_fire_count_l{event_window}d"
     burn_date_col = f"temporal_burn_date_l{event_window}d"
     burn_timestamp_col = f"temporal_burn_timestamp_l{event_window}d"
+    has_burn = burn_count_col in frame.columns
 
-    if burn_count_col in frame.columns and burn_timestamp_col not in frame.columns:
+    if has_burn and burn_timestamp_col not in frame.columns:
         raise ValueError(
             "Local label materialization requires temporal_burn_timestamp features for "
             "burn-derived event dating. Rebuild features with the updated MODIS burn adapter."
         )
+    if not has_burn:
+        # Active-fire counts (MOD14A1) carry no event date, so they cannot anchor
+        # leakage-safe occurrence labels on their own.
+        raise ValueError(
+            "Observed fire signals require an inferable temporal_burn_date label from a "
+            "dated burn source. Enable the MODIS burn (MCD64A1) source so events are dated."
+        )
 
-    burn_signal = False
-    if burn_count_col in frame.columns:
-        burn_signal = frame[burn_count_col].fillna(0).astype(float) > 0
-    fire_signal = False
-    if fire_count_col in frame.columns:
-        fire_signal = frame[fire_count_col].fillna(0).astype(float) > 0
-    if isinstance(burn_signal, bool):
-        observed_event = pd.Series(fire_signal, index=frame.index, dtype=bool)
-    elif isinstance(fire_signal, bool):
-        observed_event = pd.Series(burn_signal, index=frame.index, dtype=bool)
-    else:
-        observed_event = burn_signal | fire_signal
+    # Occurrence events are defined by the dated MCD64A1 burned-area product. MODIS
+    # active fire (MOD14A1) is retained as a predictive feature, not a label source,
+    # because its windowed counts have no associated event date.
+    observed_event = frame[burn_count_col].fillna(0).astype(float) > 0
 
     observed_dates: list[date | None] = []
     for row in frame.itertuples(index=False):
-        reference_date = pd.Timestamp(row.reference_date).date()
-        burn_timestamp = getattr(row, burn_timestamp_col, None)
-        burn_day = getattr(row, burn_date_col, None) if burn_date_col in frame.columns else None
-        observed_date = infer_observed_burn_timestamp(burn_timestamp)
-        if observed_date is None and burn_count_col not in frame.columns:
-            observed_date = infer_observed_burn_date(reference_date, burn_day, event_window)
+        observed_date = infer_observed_burn_timestamp(getattr(row, burn_timestamp_col, None))
+        if observed_date is None and burn_date_col in frame.columns:
+            observed_date = infer_observed_burn_timestamp(getattr(row, burn_date_col, None))
         observed_dates.append(observed_date)
 
     derived = frame.copy()
     derived["observed_event"] = observed_event.astype(int)
     derived["observed_event_date"] = observed_dates
-    missing_dates = derived["observed_event"].eq(1) & derived["observed_event_date"].isna()
-    if missing_dates.any():
-        raise ValueError(
-            "Observed fire/burn signals require an inferable temporal_burn_date label. "
-            "Enable MODIS burn-date features or provide a dated event source."
+    # Sub-pixel burn fractions can register a positive count without a resolvable burn
+    # date; treat those as non-events rather than failing the whole build, but surface
+    # how often it happens so a systematic dating bug is not hidden.
+    undatable = derived["observed_event"].eq(1) & derived["observed_event_date"].isna()
+    if undatable.any():
+        LOGGER.warning(
+            "Demoting %d burn-positive rows with no resolvable burn date to non-events "
+            "(likely sub-pixel MCD64A1 detections).",
+            int(undatable.sum()),
         )
+        derived.loc[undatable, "observed_event"] = 0
     return derived
 
 
@@ -375,8 +381,8 @@ def materialize_labels_from_extractors(
     frame = frame.copy()
     frame[occurrence_col] = 0
     frame["event_date"] = pd.NaT
-    frame["optical_nbr_prefire"] = pd.NA
-    frame["optical_nbr_postfire"] = pd.NA
+    frame["label_nbr_prefire"] = pd.NA
+    frame["label_nbr_postfire"] = pd.NA
     frame["y_sev_available"] = 0
     frame["y_sev_dnbr"] = pd.NA
     frame["y_sev_class"] = pd.NA
@@ -395,8 +401,8 @@ def materialize_labels_from_extractors(
         frame.at[idx, "event_date"] = pd.Timestamp(occurrence.event_date)
         if materialize_severity:
             severity = severity_extractor(geometry, occurrence.event_date, severity_window_days)
-            frame.at[idx, "optical_nbr_prefire"] = severity.prefire_nbr
-            frame.at[idx, "optical_nbr_postfire"] = severity.postfire_nbr
+            frame.at[idx, "label_nbr_prefire"] = severity.prefire_nbr
+            frame.at[idx, "label_nbr_postfire"] = severity.postfire_nbr
             frame.at[idx, "y_sev_available"] = severity.severity_available
             frame.at[idx, "y_sev_dnbr"] = severity.dnbr
             frame.at[idx, "y_sev_class"] = severity.severity_class
@@ -417,8 +423,8 @@ def materialize_labels_from_observed_events(
     frame = derive_observed_events(sorted_frame, stride_days)
     frame[occurrence_col] = 0
     frame["event_date"] = pd.NaT
-    frame["optical_nbr_prefire"] = pd.NA
-    frame["optical_nbr_postfire"] = pd.NA
+    frame["label_nbr_prefire"] = pd.NA
+    frame["label_nbr_postfire"] = pd.NA
     frame["y_sev_available"] = 0
     frame["y_sev_dnbr"] = pd.NA
     frame["y_sev_class"] = pd.NA
@@ -476,8 +482,8 @@ def materialize_labels_from_observed_events(
             frame.at[row_index, "event_date"] = pd.Timestamp(next_event_date)
             if materialize_severity:
                 severity = severity_by_event[next_event_date]
-                frame.at[row_index, "optical_nbr_prefire"] = severity.prefire_nbr
-                frame.at[row_index, "optical_nbr_postfire"] = severity.postfire_nbr
+                frame.at[row_index, "label_nbr_prefire"] = severity.prefire_nbr
+                frame.at[row_index, "label_nbr_postfire"] = severity.postfire_nbr
                 frame.at[row_index, "y_sev_available"] = severity.severity_available
                 frame.at[row_index, "y_sev_dnbr"] = severity.dnbr
                 frame.at[row_index, "y_sev_class"] = severity.severity_class
@@ -543,6 +549,28 @@ def materialize_labels(
 
     frame = frame[frame["reference_date"] <= label_cutoff].copy()
     frame["reference_date"] = frame["reference_date"].dt.date
+
+    if not materialize_severity:
+        # These event-anchored NBR columns are severity-label support, not predictors;
+        # drop the all-null companions from occurrence datasets to keep them tidy.
+        frame = frame.drop(
+            columns=[
+                column
+                for column in ("label_nbr_prefire", "label_nbr_postfire")
+                if column in frame.columns
+            ]
+        )
+
+    # Burn date/timestamp columns exist only to date events during label derivation.
+    # They are not predictors: the ISO-date strings are not model-ingestible and the
+    # absolute timestamps would encode wall-clock time (temporal leakage). The burn/
+    # fire *count* features carry the usable historical-burn signal, so drop the rest.
+    scaffolding = [
+        column
+        for column in frame.columns
+        if column.startswith(("temporal_burn_date_l", "temporal_burn_timestamp_l"))
+    ]
+    frame = frame.drop(columns=scaffolding)
     return frame
 
 

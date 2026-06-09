@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from agni.data.sources.base import EESourceAdapter, ee_date_subtract
+from agni.data.sources.base import EESourceAdapter, ee_date_subtract, materialize_ee
 
 
 class MODISFireAdapter(EESourceAdapter):
@@ -35,4 +35,4 @@ class MODISFireAdapter(EESourceAdapter):
                 scale=1000,
             )
             features[f"temporal_fire_count_l{window}d"] = fire_count.get("FireMask")
-        return features
+        return materialize_ee(features)
